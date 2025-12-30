@@ -732,7 +732,192 @@ function findBestMatchingCitation(
 export type ExtractionProgressCallback = (step: string, progress: number) => void;
 
 /**
- * Main extraction orchestrator - supports both two-pass (with citations) and single-pass modes
+ * Search Result block for Claude API
+ */
+interface SearchResultBlock {
+  type: "search_result";
+  source: string;
+  title: string;
+  content: Array<{ type: "text"; text: string }>;
+  citations: { enabled: boolean };
+}
+
+/**
+ * Citation from Claude's response
+ */
+interface SearchResultCitation {
+  type: "search_result_location";
+  source: string;
+  title: string;
+  cited_text: string;
+  search_result_index: number;
+  start_block_index: number;
+  end_block_index: number;
+}
+
+/**
+ * NEW: Extract using Search Results API (single-pass with native citations)
+ *
+ * This approach:
+ * 1. Converts PDF pages into search_result blocks
+ * 2. Claude extracts data and automatically cites with exact text
+ * 3. Returns structured data with `cited_text` guaranteed to be exact
+ */
+export const extractWithSearchResults = async (
+  pageTexts: Array<{ page: number; text: string }>,
+  request: string,
+  useThinking: boolean,
+  onProgress?: ExtractionProgressCallback
+): Promise<{ extraction: any; citations: Map<string, string> }> => {
+  const anthropic = new Anthropic({
+    apiKey: process.env.API_KEY,
+    dangerouslyAllowBrowser: true
+  });
+
+  onProgress?.("Preparing PDF pages as search results...", 20);
+
+  // Convert pages to search_result blocks
+  const searchResults: SearchResultBlock[] = pageTexts.map(({ page, text }) => ({
+    type: "search_result",
+    source: `page-${page}`,
+    title: `Page ${page}`,
+    content: [{ type: "text", text: text.substring(0, 50000) }], // Limit per page
+    citations: { enabled: true }
+  }));
+
+  onProgress?.("Extracting with native citations...", 40);
+
+  // Build the message content: search results + extraction prompt
+  const messageContent: any[] = [
+    ...searchResults,
+    {
+      type: "text",
+      text: `Based on the above PDF pages, extract all clinical study data using the ExtractionForm tool.
+
+CRITICAL: For EVERY field you extract, Claude will automatically cite the exact source text.
+The citations will include the precise page and quoted text.
+
+Focus on:
+1. Study ID: Authors, year, journal, DOI, country
+2. PICO-T: Population, intervention, comparator, outcomes, timing
+3. Baseline: Sample sizes, age, gender, clinical scores
+4. Imaging: Vascular territory, volume, edema
+5. Interventions: Indications, procedures
+6. Outcomes: Mortality, mRS scores
+7. Complications: All reported adverse events
+
+${request ? `Additional focus: ${request}` : ""}
+
+Use the ExtractionForm tool to structure your findings.`
+    }
+  ];
+
+  const requestConfig: Anthropic.MessageCreateParams = {
+    model: "claude-sonnet-4-5-20250929",
+    max_tokens: 16000,
+    temperature: 1,
+    system: systemPrompt,
+    messages: [{ role: "user", content: messageContent }],
+    tools: [{
+      type: "custom",
+      name: "ExtractionForm",
+      description: "Extracts structured clinical study data with automatic citation tracking.",
+      input_schema: extractionFormSchema as Anthropic.Tool.InputSchema
+    }]
+  };
+
+  if (useThinking) {
+    (requestConfig as any).thinking = {
+      type: "enabled",
+      budget_tokens: 16000
+    };
+  }
+
+  try {
+    onProgress?.("Processing extraction...", 60);
+    const response = await anthropic.messages.create(requestConfig);
+
+    // Collect all citations from the response
+    const citationsMap = new Map<string, string>();
+    let extraction: any = null;
+
+    for (const block of response.content) {
+      // Extract tool use result
+      if (block.type === 'tool_use' && block.name === 'ExtractionForm') {
+        extraction = block.input;
+      }
+
+      // Extract citations from text blocks
+      if (block.type === 'text' && (block as any).citations) {
+        for (const citation of (block as any).citations as SearchResultCitation[]) {
+          // Key: page-fieldContext, Value: exact cited_text
+          const pageNum = parseInt(citation.source.replace('page-', ''));
+          citationsMap.set(`${citation.source}:${citation.cited_text.substring(0, 50)}`, citation.cited_text);
+        }
+      }
+    }
+
+    onProgress?.("Enriching with citations...", 80);
+
+    // Enrich extraction with cited_text from citations
+    if (extraction) {
+      enrichExtractionWithSearchCitations(extraction, citationsMap);
+    }
+
+    onProgress?.("Extraction complete", 100);
+
+    return {
+      extraction: extraction || {},
+      citations: citationsMap
+    };
+  } catch (error: any) {
+    console.error("Search results extraction failed:", error);
+    throw new Error(`Search results extraction failed: ${error.message}`);
+  }
+};
+
+/**
+ * Enrich extraction results with cited_text from Search Results citations
+ */
+function enrichExtractionWithSearchCitations(
+  obj: any,
+  citationsMap: Map<string, string>,
+  path: string = ""
+): void {
+  if (!obj || typeof obj !== 'object') return;
+
+  if (Array.isArray(obj)) {
+    obj.forEach((item, i) => enrichExtractionWithSearchCitations(item, citationsMap, `${path}[${i}]`));
+    return;
+  }
+
+  for (const [key, value] of Object.entries(obj)) {
+    const currentPath = path ? `${path}.${key}` : key;
+
+    if (key === 'source_location' && typeof value === 'object' && value !== null) {
+      const sourceLocation = value as any;
+
+      // If we have a page number, try to find matching citation
+      if (sourceLocation.page) {
+        const pageKey = `page-${sourceLocation.page}`;
+
+        // Look for any citation from this page
+        for (const [citationKey, citedText] of citationsMap) {
+          if (citationKey.startsWith(pageKey)) {
+            sourceLocation.cited_text = citedText;
+            sourceLocation.citation_verified = true;
+            break;
+          }
+        }
+      }
+    } else if (typeof value === 'object') {
+      enrichExtractionWithSearchCitations(value, citationsMap, currentPath);
+    }
+  }
+}
+
+/**
+ * Main extraction orchestrator - supports Search Results (preferred), two-pass, and single-pass modes
  *
  * @param pdfText - Extracted text from PDF (used for single-pass fallback)
  * @param request - User's extraction request
@@ -740,6 +925,7 @@ export type ExtractionProgressCallback = (step: string, progress: number) => voi
  * @param images - Optional page images for visual analysis
  * @param pdfBase64 - Optional base64 PDF for two-pass citation extraction
  * @param onProgress - Optional callback for progress updates
+ * @param pageTexts - Optional array of page texts for Search Results API (preferred)
  */
 export const runExtraction = async (
   pdfText: string,
@@ -747,10 +933,32 @@ export const runExtraction = async (
   useThinking: boolean,
   images?: string[],
   pdfBase64?: string,
-  onProgress?: ExtractionProgressCallback
+  onProgress?: ExtractionProgressCallback,
+  pageTexts?: Array<{ page: number; text: string }>
 ): Promise<any> => {
 
-  // TWO-PASS MODE: Use Citations API for verified provenance
+  // PREFERRED: Search Results API (single-pass with native exact citations)
+  if (pageTexts && pageTexts.length > 0) {
+    try {
+      onProgress?.("Using Search Results API for precise citations...", 10);
+
+      const { extraction, citations } = await extractWithSearchResults(
+        pageTexts,
+        request,
+        useThinking,
+        onProgress
+      );
+
+      console.log(`Search Results extraction complete: ${citations.size} citations collected`);
+      return extraction;
+    } catch (error: any) {
+      console.warn("Search Results extraction failed, falling back to two-pass:", error.message);
+      onProgress?.("Falling back to two-pass extraction...", 20);
+      // Fall through to two-pass mode
+    }
+  }
+
+  // FALLBACK 1: Two-pass mode with Citations API
   if (pdfBase64) {
     try {
       onProgress?.("Extracting with citations (Pass 1)...", 25);

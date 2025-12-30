@@ -30,6 +30,7 @@ export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [pdfText, setPdfText] = useState<string>("");
+  const [pageTexts, setPageTexts] = useState<Array<{ page: number; text: string }>>([]);
   const [pdfImages, setPdfImages] = useState<string[]>([]);
   const [pdfBase64, setPdfBase64] = useState<string>("");  // For two-pass citation extraction
   const [request, setRequest] = useState<string>("Extract comprehensive clinical study data: Study ID, PICO-T details, Baseline demographics (age/sex/N), Imaging findings, Interventions, Study Arms, Outcomes (Mortality/mRS), and Complications.");
@@ -74,6 +75,7 @@ export default function App() {
 
       let fullText = "";
       const images: string[] = [];
+      const extractedPageTexts: Array<{ page: number; text: string }> = [];
 
       // Build searchable text index (Ctrl+F approach)
       const newTextIndex: TextPosition[] = [];
@@ -107,6 +109,9 @@ export default function App() {
         const pageText = textContent.items.map((item: any) => item.str).join(' ');
         fullText += `--- Page ${i} ---\n${pageText}\n\n`;
 
+        // Store individual page text for Search Results API
+        extractedPageTexts.push({ page: i, text: pageText });
+
         if (i <= 3) {
           const canvas = document.createElement('canvas');
           const context = canvas.getContext('2d');
@@ -120,7 +125,9 @@ export default function App() {
       }
 
       setTextIndex(newTextIndex);
+      setPageTexts(extractedPageTexts);
       console.log(`Built text index with ${newTextIndex.length} items across ${pdf.numPages} pages`);
+      console.log(`Stored ${extractedPageTexts.length} page texts for Search Results API`);
 
       setPdfText(fullText);
       setPdfImages(images);
@@ -360,14 +367,15 @@ export default function App() {
     };
 
     try {
-      // Pass pdfBase64 for two-pass citation extraction (if available)
+      // Pass pageTexts for Search Results API (preferred), then pdfBase64 for two-pass fallback
       const res = await runExtraction(
         pdfText,
         request,
         useThinking,
         pdfImages,
         pdfBase64 || undefined,  // Enable two-pass mode if base64 available
-        onProgress
+        onProgress,
+        pageTexts.length > 0 ? pageTexts : undefined  // Enable Search Results API if pages available
       );
       console.log("Claude Response:", res);
       setResults(res);
