@@ -131,83 +131,84 @@ export default function App() {
   };
 
   // Mock data for demo mode - demonstrates bidirectional navigation
+  // Citations use longer, exact phrases that appear verbatim in the PDF
   const generateDemoResults = () => {
     return {
       studyId: {
-        citation: { content: "Mattar et al. (2021)", source_location: { page: 1, cited_text: "Mattar et al.", citation_verified: true }, confidence: "high" },
-        doi: { content: "10.1016/j.wneu.2020.12.053", source_location: { page: 1, cited_text: "https://doi.org/10.1016/j.wneu.2020.12.053", citation_verified: true }, confidence: "high" },
-        journal: { content: "World Neurosurgery", source_location: { page: 1, cited_text: "World Neurosurgery", citation_verified: true }, confidence: "high" },
+        citation: { content: "Mattar et al. (2021)", source_location: { page: 1, cited_text: "Interdisciplinary Neurosurgery: Advanced Techniques and Case Management", citation_verified: true }, confidence: "high" },
+        doi: { content: "10.1016/j.wneu.2020.12.053", source_location: { page: 1, cited_text: "https://doi.org/10.1016/j.inat.2020.100822", citation_verified: true }, confidence: "high" },
+        journal: { content: "Interdisciplinary Neurosurgery", source_location: { page: 1, cited_text: "Interdisciplinary Neurosurgery", citation_verified: true }, confidence: "high" },
         year: { content: 2021, source_location: { page: 1 }, confidence: "high" },
-        country: { content: "Brazil", source_location: { page: 1, cited_text: "Brazil", citation_verified: true }, confidence: "high" },
+        country: { content: "Egypt", source_location: { page: 1, cited_text: "Department of Neurosurgery, College of Medicine", citation_verified: true }, confidence: "high" },
       },
       picoT: {
-        population: { content: "Patients with cerebellar stroke requiring surgical intervention", source_location: { page: 2, cited_text: "patients with cerebellar stroke", citation_verified: true }, confidence: "high" },
-        intervention: { content: "Suboccipital decompressive craniectomy (SDC)", source_location: { page: 2, cited_text: "suboccipital decompressive craniectomy", citation_verified: true }, confidence: "high" },
+        population: { content: "Patients with massive cerebellar infarction", source_location: { page: 2, cited_text: "massive cerebellar infarction", citation_verified: true }, confidence: "high" },
+        intervention: { content: "Emergent suboccipital craniectomy (ESC)", source_location: { page: 2, cited_text: "emergent suboccipital craniectomy", citation_verified: true }, confidence: "high" },
         comparator: { content: "Conservative medical management", source_location: { page: 2 }, confidence: "medium" },
-        outcomesMeasured: { content: "Mortality, mRS at discharge and follow-up", source_location: { page: 3, cited_text: "modified Rankin Scale", citation_verified: true }, confidence: "high" },
-        timingFollowUp: { content: "Discharge and 90 days", source_location: { page: 3 }, confidence: "medium" },
-        studyType: { content: "Retrospective cohort study", source_location: { page: 2, cited_text: "retrospective", citation_verified: true }, confidence: "high" },
+        outcomesMeasured: { content: "Mortality, mRS at discharge and follow-up", source_location: { page: 3, cited_text: "modified Rankin Scale score", citation_verified: true }, confidence: "high" },
+        timingFollowUp: { content: "Discharge and follow-up", source_location: { page: 3 }, confidence: "medium" },
+        studyType: { content: "Retrospective cohort study", source_location: { page: 2, cited_text: "retrospective study was conducted", citation_verified: true }, confidence: "high" },
         inclusionMet: { content: true, source_location: { page: 2 }, confidence: "high" },
       },
       baseline: {
         sampleSize: {
-          totalN: { content: 45, source_location: { page: 3, cited_text: "45 patients", citation_verified: true }, confidence: "high" },
-          surgicalN: { content: 28, source_location: { page: 3, cited_text: "28 patients underwent SDC", citation_verified: true }, confidence: "high" },
-          controlN: { content: 17, source_location: { page: 3, cited_text: "17 patients conservative", citation_verified: true }, confidence: "high" },
+          totalN: { content: 42, source_location: { page: 3, cited_text: "a sum of 42 patients", citation_verified: true }, confidence: "high" },
+          surgicalN: { content: 20, source_location: { page: 3, cited_text: "20 cases had emergent suboccipital craniectomy", citation_verified: true }, confidence: "high" },
+          controlN: { content: 22, source_location: { page: 3, cited_text: "22 patients were treated conservatively", citation_verified: true }, confidence: "high" },
         },
         age: {
-          mean: { content: 62.4, source_location: { page: 4, cited_text: "mean age 62.4 years", citation_verified: true }, confidence: "high" },
-          sd: { content: 12.8, source_location: { page: 4 }, confidence: "medium" },
+          mean: { content: 58.5, source_location: { page: 3, cited_text: "mean age of 58.5 years", citation_verified: true }, confidence: "high" },
+          sd: { content: 10.2, source_location: { page: 3 }, confidence: "medium" },
         },
         gender: {
-          maleN: { content: 27, source_location: { page: 4, cited_text: "27 males", citation_verified: true }, confidence: "high" },
-          femaleN: { content: 18, source_location: { page: 4 }, confidence: "high" },
+          maleN: { content: 36, source_location: { page: 3, cited_text: "36 men, 6 women", citation_verified: true }, confidence: "high" },
+          femaleN: { content: 6, source_location: { page: 3 }, confidence: "high" },
         },
         clinicalScores: {
-          gcsMeanOrMedian: { content: 11.2, source_location: { page: 4, cited_text: "GCS 11.2", citation_verified: true }, confidence: "high" },
-          nihssMeanOrMedian: { content: 8.5, source_location: { page: 4 }, confidence: "medium" },
+          gcsMeanOrMedian: { content: 10, source_location: { page: 3, cited_text: "GCS score on admission", citation_verified: true }, confidence: "high" },
+          nihssMeanOrMedian: { content: 15, source_location: { page: 3 }, confidence: "medium" },
         },
       },
       imaging: {
-        vascularTerritory: { content: "PICA, SCA, AICA territories", source_location: { page: 5, cited_text: "posterior inferior cerebellar artery", citation_verified: true }, confidence: "high" },
-        strokeVolumeCerebellum: { content: ">1/3 cerebellar hemisphere", source_location: { page: 5 }, confidence: "medium" },
+        vascularTerritory: { content: "PICA territory", source_location: { page: 3, cited_text: "PICA (posterior inferior cerebellar artery)", citation_verified: true }, confidence: "high" },
+        strokeVolumeCerebellum: { content: ">1/3 cerebellar hemisphere", source_location: { page: 3 }, confidence: "medium" },
         edema: {
-          description: { content: "Significant edema with mass effect", source_location: { page: 5, cited_text: "significant mass effect", citation_verified: true }, confidence: "high" },
+          description: { content: "Significant edema with mass effect", source_location: { page: 4, cited_text: "mass effect on the surrounding neurological structures", citation_verified: true }, confidence: "high" },
         },
         involvementAreas: {
-          brainstemInvolvement: { content: true, source_location: { page: 5, cited_text: "brainstem compression", citation_verified: true }, confidence: "high" },
-          supratentorialInvolvement: { content: false, source_location: { page: 5 }, confidence: "medium" },
+          brainstemInvolvement: { content: true, source_location: { page: 4, cited_text: "brainstem compression", citation_verified: true }, confidence: "high" },
+          supratentorialInvolvement: { content: false, source_location: { page: 4 }, confidence: "medium" },
         },
       },
       interventions: {
         surgicalIndications: [
-          { content: "Deteriorating consciousness", source_location: { page: 6, cited_text: "deteriorating level of consciousness", citation_verified: true }, confidence: "high", data_type: "indication" },
-          { content: "Hydrocephalus", source_location: { page: 6, cited_text: "obstructive hydrocephalus", citation_verified: true }, confidence: "high", data_type: "indication" },
-          { content: "Brainstem compression", source_location: { page: 6 }, confidence: "high", data_type: "indication" },
+          { content: "Deteriorating consciousness", source_location: { page: 4, cited_text: "deterioration in conscious level", citation_verified: true }, confidence: "high", data_type: "indication" },
+          { content: "Hydrocephalus", source_location: { page: 4, cited_text: "obstructive hydrocephalus", citation_verified: true }, confidence: "high", data_type: "indication" },
+          { content: "Brainstem compression", source_location: { page: 4, cited_text: "compression of the brainstem", citation_verified: true }, confidence: "high", data_type: "indication" },
         ],
         interventionTypes: [
-          { content: "Suboccipital decompressive craniectomy", source_location: { page: 6, cited_text: "SDC was performed", citation_verified: true }, confidence: "high", data_type: "procedure" },
-          { content: "EVD placement", source_location: { page: 6, cited_text: "external ventricular drain", citation_verified: true }, confidence: "high", data_type: "procedure" },
+          { content: "Suboccipital decompressive craniectomy", source_location: { page: 4, cited_text: "suboccipital decompressive craniectomy", citation_verified: true }, confidence: "high", data_type: "procedure" },
+          { content: "EVD placement", source_location: { page: 4, cited_text: "external ventricular drain", citation_verified: true }, confidence: "high", data_type: "procedure" },
         ],
       },
       studyArms: [
-        { armId: { content: "surgical", source_location: { page: 3 }, confidence: "high" }, label: { content: "SDC Group", source_location: { page: 3, cited_text: "surgical group", citation_verified: true }, confidence: "high" }, description: { content: "Patients who underwent suboccipital decompressive craniectomy", source_location: { page: 3 }, confidence: "high" } },
+        { armId: { content: "surgical", source_location: { page: 3 }, confidence: "high" }, label: { content: "ESC Group", source_location: { page: 3, cited_text: "emergent suboccipital craniectomy group", citation_verified: true }, confidence: "high" }, description: { content: "Patients who underwent emergent suboccipital craniectomy", source_location: { page: 3 }, confidence: "high" } },
         { armId: { content: "control", source_location: { page: 3 }, confidence: "high" }, label: { content: "Conservative Group", source_location: { page: 3 }, confidence: "high" }, description: { content: "Patients managed with conservative medical treatment", source_location: { page: 3 }, confidence: "high" } },
       ],
       outcomes: {
         mortality: [
-          { armId: { content: "surgical" }, timepoint: { content: "In-hospital" }, deathsN: { content: 5, source_location: { page: 7, cited_text: "5 deaths in surgical group", citation_verified: true }, confidence: "high" }, totalN: { content: 28 }, notes: { content: "17.9% mortality" } },
-          { armId: { content: "control" }, timepoint: { content: "In-hospital" }, deathsN: { content: 8, source_location: { page: 7, cited_text: "8 deaths conservative", citation_verified: true }, confidence: "high" }, totalN: { content: 17 }, notes: { content: "47.1% mortality" } },
+          { armId: { content: "surgical" }, timepoint: { content: "In-hospital" }, deathsN: { content: 4, source_location: { page: 5, cited_text: "mortality rate was 20%", citation_verified: true }, confidence: "high" }, totalN: { content: 20 }, notes: { content: "20% mortality" } },
+          { armId: { content: "control" }, timepoint: { content: "In-hospital" }, deathsN: { content: 12, source_location: { page: 5, cited_text: "mortality rate in the conservative group", citation_verified: true }, confidence: "high" }, totalN: { content: 22 }, notes: { content: "54.5% mortality" } },
         ],
         mrs: [
-          { armId: { content: "surgical" }, timepoint: { content: "90 days" }, definition: { content: "mRS 0-2 (favorable)" }, eventsN: { content: 12, source_location: { page: 8, cited_text: "12 patients achieved good outcome", citation_verified: true }, confidence: "high" }, totalN: { content: 23 }, notes: { content: "52.2% favorable" } },
-          { armId: { content: "control" }, timepoint: { content: "90 days" }, definition: { content: "mRS 0-2 (favorable)" }, eventsN: { content: 3, source_location: { page: 8 }, confidence: "medium" }, totalN: { content: 9 }, notes: { content: "33.3% favorable" } },
+          { armId: { content: "surgical" }, timepoint: { content: "Discharge" }, definition: { content: "mRS 0-2 (favorable)" }, eventsN: { content: 10, source_location: { page: 5, cited_text: "good outcomes in the surgical group", citation_verified: true }, confidence: "high" }, totalN: { content: 16 }, notes: { content: "62.5% favorable" } },
+          { armId: { content: "control" }, timepoint: { content: "Discharge" }, definition: { content: "mRS 0-2 (favorable)" }, eventsN: { content: 4, source_location: { page: 5 }, confidence: "medium" }, totalN: { content: 10 }, notes: { content: "40% favorable" } },
         ],
       },
       complications: {
         items: [
-          { armId: { content: "surgical" }, complication: { content: "CSF leak", source_location: { page: 9, cited_text: "CSF leak in 3 patients", citation_verified: true }, confidence: "high" }, eventsN: { content: 3 }, totalN: { content: 28 }, timepoint: { content: "Post-operative" }, notes: { content: "" } },
-          { armId: { content: "surgical" }, complication: { content: "Wound infection", source_location: { page: 9 }, confidence: "medium" }, eventsN: { content: 2 }, totalN: { content: 28 }, timepoint: { content: "Post-operative" }, notes: { content: "" } },
+          { armId: { content: "surgical" }, complication: { content: "CSF leak", source_location: { page: 5, cited_text: "CSF diversion via temporary EVD", citation_verified: true }, confidence: "high" }, eventsN: { content: 2 }, totalN: { content: 20 }, timepoint: { content: "Post-operative" }, notes: { content: "" } },
+          { armId: { content: "surgical" }, complication: { content: "Wound infection", source_location: { page: 5, cited_text: "superficial wound infection", citation_verified: true }, confidence: "medium" }, eventsN: { content: 1 }, totalN: { content: 20 }, timepoint: { content: "Post-operative" }, notes: { content: "" } },
         ],
       },
       extractionLog: {
@@ -235,64 +236,42 @@ export default function App() {
 
   /**
    * Ctrl+F style search: finds which text items contain the query string.
-   * Returns the page number and item indices to highlight.
+   * STRICT MODE: Only exact substring matches, only on the hint page.
    */
   const searchForCitedText = useCallback((query: string, hintPage?: number): SearchMatch | null => {
-    if (!query || query.length < 2 || textIndex.length === 0) return null;
+    // Require minimum 12 characters for highlighting (avoid short generic matches)
+    if (!query || query.length < 12 || textIndex.length === 0) return null;
+
+    // Skip pure numbers or very generic terms
+    if (/^\d+\.?\d*$/.test(query.trim())) return null; // Skip "45", "8.5", etc.
 
     const normalizedQuery = query.toLowerCase().trim().replace(/\s+/g, ' ');
 
-    // Build full text for the hint page first (or all pages)
-    const searchPages = hintPage
-      ? [hintPage, ...([1,2,3,4,5,6,7,8,9,10].filter(p => p !== hintPage))] // Prioritize hint page
-      : [1,2,3,4,5,6,7,8,9,10];
+    // ONLY search on the specific page indicated (no page-hopping)
+    if (!hintPage) return null;
 
-    for (const pageNum of searchPages) {
-      const pageItems = textIndex.filter(t => t.pageNum === pageNum);
-      if (pageItems.length === 0) continue;
+    const pageItems = textIndex.filter(t => t.pageNum === hintPage);
+    if (pageItems.length === 0) return null;
 
-      // Concatenate all text items for this page with spaces
-      const pageTexts = pageItems.map(t => t.text);
-      const fullPageText = pageTexts.join(' ');
-      const normalizedPageText = fullPageText.toLowerCase();
+    // Concatenate all text items for this page with spaces
+    const pageTexts = pageItems.map(t => t.text);
+    const fullPageText = pageTexts.join(' ');
+    const normalizedPageText = fullPageText.toLowerCase();
 
-      // Strategy 1: Exact substring match (Ctrl+F)
-      const matchIndex = normalizedPageText.indexOf(normalizedQuery);
-      if (matchIndex !== -1) {
-        // Find which items span this character range
-        const itemIndices = findItemsForCharRange(pageItems, matchIndex, matchIndex + normalizedQuery.length);
-        if (itemIndices.length > 0) {
-          return {
-            pageNum,
-            itemIndices,
-            exactMatch: true,
-            confidence: 1.0
-          };
-        }
-      }
+    // ONLY exact substring match (true Ctrl+F behavior)
+    const matchIndex = normalizedPageText.indexOf(normalizedQuery);
+    if (matchIndex !== -1) {
+      // Find which items span this character range
+      const itemIndices = findItemsForCharRange(pageItems, matchIndex, matchIndex + normalizedQuery.length);
 
-      // Strategy 2: Word-overlap match for longer citations
-      if (query.length > 15) {
-        const queryWords = normalizedQuery.split(' ').filter(w => w.length > 3);
-        if (queryWords.length >= 2) {
-          // Find items that contain multiple query words
-          const matchingItems: number[] = [];
-          pageItems.forEach((item, idx) => {
-            const itemNorm = item.normalizedText;
-            const matchCount = queryWords.filter(w => itemNorm.includes(w)).length;
-            if (matchCount >= 2 || (queryWords.length === 2 && matchCount >= 1)) {
-              matchingItems.push(item.itemIndex);
-            }
-          });
-          if (matchingItems.length > 0) {
-            return {
-              pageNum,
-              itemIndices: matchingItems,
-              exactMatch: false,
-              confidence: 0.7
-            };
-          }
-        }
+      // Limit to max 3 consecutive items (avoid highlighting entire paragraphs)
+      if (itemIndices.length > 0 && itemIndices.length <= 5) {
+        return {
+          pageNum: hintPage,
+          itemIndices,
+          exactMatch: true,
+          confidence: 1.0
+        };
       }
     }
 
