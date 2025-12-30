@@ -29,14 +29,14 @@
   },
   "dependencies": {
     "react-dom": "^19.2.3",
-    "@anthropic-ai/sdk": "^0.52.0",
+    "@anthropic-ai/sdk": "^0.71.2",
     "react": "^19.2.3",
     "lucide-react": "^0.562.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
+    "typescript": "~5.9.3",
     "vite": "^6.2.0"
   }
 }
