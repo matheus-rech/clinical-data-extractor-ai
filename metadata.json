@@ -1,0 +1,7 @@
+{
+  "name": "Clinical Data Extractor AI",
+  "description": "A sophisticated AI-powered tool for extracting structured clinical data from PDF documents using Gemini's advanced reasoning and image analysis capabilities.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
