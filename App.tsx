@@ -34,6 +34,7 @@ export default function App() {
   const [pdfBase64, setPdfBase64] = useState<string>("");  // For two-pass citation extraction
   const [request, setRequest] = useState<string>("Extract comprehensive clinical study data: Study ID, PICO-T details, Baseline demographics (age/sex/N), Imaging findings, Interventions, Study Arms, Outcomes (Mortality/mRS), and Complications.");
   const [useThinking, setUseThinking] = useState(true);
+  const [useDemoMode, setUseDemoMode] = useState(false);  // Demo mode for testing without API
   const [processing, setProcessing] = useState<ProcessingState>({
     isProcessing: false,
     step: 'Idle',
@@ -98,12 +99,123 @@ export default function App() {
     }
   };
 
+  // Mock data for demo mode - demonstrates bidirectional navigation
+  const generateDemoResults = () => {
+    return {
+      studyId: {
+        citation: { content: "Mattar et al. (2021)", source_location: { page: 1, cited_text: "Mattar et al.", citation_verified: true }, confidence: "high" },
+        doi: { content: "10.1016/j.wneu.2020.12.053", source_location: { page: 1, cited_text: "https://doi.org/10.1016/j.wneu.2020.12.053", citation_verified: true }, confidence: "high" },
+        journal: { content: "World Neurosurgery", source_location: { page: 1, cited_text: "World Neurosurgery", citation_verified: true }, confidence: "high" },
+        year: { content: 2021, source_location: { page: 1 }, confidence: "high" },
+        country: { content: "Brazil", source_location: { page: 1, cited_text: "Brazil", citation_verified: true }, confidence: "high" },
+      },
+      picoT: {
+        population: { content: "Patients with cerebellar stroke requiring surgical intervention", source_location: { page: 2, cited_text: "patients with cerebellar stroke", citation_verified: true }, confidence: "high" },
+        intervention: { content: "Suboccipital decompressive craniectomy (SDC)", source_location: { page: 2, cited_text: "suboccipital decompressive craniectomy", citation_verified: true }, confidence: "high" },
+        comparator: { content: "Conservative medical management", source_location: { page: 2 }, confidence: "medium" },
+        outcomesMeasured: { content: "Mortality, mRS at discharge and follow-up", source_location: { page: 3, cited_text: "modified Rankin Scale", citation_verified: true }, confidence: "high" },
+        timingFollowUp: { content: "Discharge and 90 days", source_location: { page: 3 }, confidence: "medium" },
+        studyType: { content: "Retrospective cohort study", source_location: { page: 2, cited_text: "retrospective", citation_verified: true }, confidence: "high" },
+        inclusionMet: { content: true, source_location: { page: 2 }, confidence: "high" },
+      },
+      baseline: {
+        sampleSize: {
+          totalN: { content: 45, source_location: { page: 3, cited_text: "45 patients", citation_verified: true }, confidence: "high" },
+          surgicalN: { content: 28, source_location: { page: 3, cited_text: "28 patients underwent SDC", citation_verified: true }, confidence: "high" },
+          controlN: { content: 17, source_location: { page: 3, cited_text: "17 patients conservative", citation_verified: true }, confidence: "high" },
+        },
+        age: {
+          mean: { content: 62.4, source_location: { page: 4, cited_text: "mean age 62.4 years", citation_verified: true }, confidence: "high" },
+          sd: { content: 12.8, source_location: { page: 4 }, confidence: "medium" },
+        },
+        gender: {
+          maleN: { content: 27, source_location: { page: 4, cited_text: "27 males", citation_verified: true }, confidence: "high" },
+          femaleN: { content: 18, source_location: { page: 4 }, confidence: "high" },
+        },
+        clinicalScores: {
+          gcsMeanOrMedian: { content: 11.2, source_location: { page: 4, cited_text: "GCS 11.2", citation_verified: true }, confidence: "high" },
+          nihssMeanOrMedian: { content: 8.5, source_location: { page: 4 }, confidence: "medium" },
+        },
+      },
+      imaging: {
+        vascularTerritory: { content: "PICA, SCA, AICA territories", source_location: { page: 5, cited_text: "posterior inferior cerebellar artery", citation_verified: true }, confidence: "high" },
+        strokeVolumeCerebellum: { content: ">1/3 cerebellar hemisphere", source_location: { page: 5 }, confidence: "medium" },
+        edema: {
+          description: { content: "Significant edema with mass effect", source_location: { page: 5, cited_text: "significant mass effect", citation_verified: true }, confidence: "high" },
+        },
+        involvementAreas: {
+          brainstemInvolvement: { content: true, source_location: { page: 5, cited_text: "brainstem compression", citation_verified: true }, confidence: "high" },
+          supratentorialInvolvement: { content: false, source_location: { page: 5 }, confidence: "medium" },
+        },
+      },
+      interventions: {
+        surgicalIndications: [
+          { content: "Deteriorating consciousness", source_location: { page: 6, cited_text: "deteriorating level of consciousness", citation_verified: true }, confidence: "high", data_type: "indication" },
+          { content: "Hydrocephalus", source_location: { page: 6, cited_text: "obstructive hydrocephalus", citation_verified: true }, confidence: "high", data_type: "indication" },
+          { content: "Brainstem compression", source_location: { page: 6 }, confidence: "high", data_type: "indication" },
+        ],
+        interventionTypes: [
+          { content: "Suboccipital decompressive craniectomy", source_location: { page: 6, cited_text: "SDC was performed", citation_verified: true }, confidence: "high", data_type: "procedure" },
+          { content: "EVD placement", source_location: { page: 6, cited_text: "external ventricular drain", citation_verified: true }, confidence: "high", data_type: "procedure" },
+        ],
+      },
+      studyArms: [
+        { armId: { content: "surgical", source_location: { page: 3 }, confidence: "high" }, label: { content: "SDC Group", source_location: { page: 3, cited_text: "surgical group", citation_verified: true }, confidence: "high" }, description: { content: "Patients who underwent suboccipital decompressive craniectomy", source_location: { page: 3 }, confidence: "high" } },
+        { armId: { content: "control", source_location: { page: 3 }, confidence: "high" }, label: { content: "Conservative Group", source_location: { page: 3 }, confidence: "high" }, description: { content: "Patients managed with conservative medical treatment", source_location: { page: 3 }, confidence: "high" } },
+      ],
+      outcomes: {
+        mortality: [
+          { armId: { content: "surgical" }, timepoint: { content: "In-hospital" }, deathsN: { content: 5, source_location: { page: 7, cited_text: "5 deaths in surgical group", citation_verified: true }, confidence: "high" }, totalN: { content: 28 }, notes: { content: "17.9% mortality" } },
+          { armId: { content: "control" }, timepoint: { content: "In-hospital" }, deathsN: { content: 8, source_location: { page: 7, cited_text: "8 deaths conservative", citation_verified: true }, confidence: "high" }, totalN: { content: 17 }, notes: { content: "47.1% mortality" } },
+        ],
+        mrs: [
+          { armId: { content: "surgical" }, timepoint: { content: "90 days" }, definition: { content: "mRS 0-2 (favorable)" }, eventsN: { content: 12, source_location: { page: 8, cited_text: "12 patients achieved good outcome", citation_verified: true }, confidence: "high" }, totalN: { content: 23 }, notes: { content: "52.2% favorable" } },
+          { armId: { content: "control" }, timepoint: { content: "90 days" }, definition: { content: "mRS 0-2 (favorable)" }, eventsN: { content: 3, source_location: { page: 8 }, confidence: "medium" }, totalN: { content: 9 }, notes: { content: "33.3% favorable" } },
+        ],
+      },
+      complications: {
+        items: [
+          { armId: { content: "surgical" }, complication: { content: "CSF leak", source_location: { page: 9, cited_text: "CSF leak in 3 patients", citation_verified: true }, confidence: "high" }, eventsN: { content: 3 }, totalN: { content: 28 }, timepoint: { content: "Post-operative" }, notes: { content: "" } },
+          { armId: { content: "surgical" }, complication: { content: "Wound infection", source_location: { page: 9 }, confidence: "medium" }, eventsN: { content: 2 }, totalN: { content: 28 }, timepoint: { content: "Post-operative" }, notes: { content: "" } },
+        ],
+      },
+      extractionLog: {
+        extracted_data: [],
+        summary: {
+          document_type: "Clinical research article",
+          total_extractions: 42,
+          demographics: { total_patients: 45, male: 27, female: 18 },
+          clinical_aspects: { mean_age: 62.4, gcs: 11.2 },
+          interventional_aspects: { surgical: 28, conservative: 17 },
+          picos: {
+            population: "Cerebellar stroke patients",
+            intervention: "SDC",
+            comparison: "Conservative management",
+            outcomes: "Mortality, mRS",
+          },
+        },
+      },
+    };
+  };
+
   const startExtraction = async () => {
     if (!pdfText) {
       alert("No PDF text found. Please wait for the document to finish processing or try re-uploading.");
       return;
     }
     setProcessing({ isProcessing: true, step: 'Starting extraction...', progress: 10 });
+
+    // Demo mode - use mock data for UI testing
+    if (useDemoMode) {
+      setProcessing({ isProcessing: true, step: 'Generating demo data...', progress: 50 });
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const demoResults = generateDemoResults();
+      console.log("Demo Results:", demoResults);
+      setResults(demoResults as any);
+      setProcessing({ isProcessing: false, step: 'Complete (Demo Mode)', progress: 100 });
+      setActiveStep(1);
+      return;
+    }
 
     // Progress callback for real-time UI updates
     const onProgress = (step: string, progress: number) => {
@@ -404,22 +516,39 @@ export default function App() {
                     className="w-full h-40 rounded-2xl border border-slate-200 p-5 text-sm focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 transition-all resize-none bg-slate-50 font-medium text-slate-700 shadow-inner"
                   />
                   
+                  <div className="mt-4 flex items-center gap-6">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input type="checkbox" checked={useThinking} onChange={() => setUseThinking(!useThinking)} className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500" />
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider group-hover:text-indigo-600">Extended Thinking</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input type="checkbox" checked={useDemoMode} onChange={() => setUseDemoMode(!useDemoMode)} className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500" />
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider group-hover:text-emerald-600">Demo Mode</span>
+                    </label>
+                  </div>
+
                   <div className="mt-6 flex gap-4">
                     <button
                       disabled={!file || processing.isProcessing}
                       onClick={startExtraction}
-                      className="flex-1 bg-slate-900 hover:bg-indigo-600 disabled:opacity-50 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-xl shadow-slate-200 active:scale-[0.98] flex items-center justify-center gap-3 group"
+                      className={`flex-1 ${useDemoMode ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-900 hover:bg-indigo-600'} disabled:opacity-50 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-xl shadow-slate-200 active:scale-[0.98] flex items-center justify-center gap-3 group`}
                     >
                       {processing.isProcessing ? (
                         <>Processing...</>
                       ) : (
                         <>
                           <Sparkles className="w-5 h-5 text-indigo-400 group-hover:text-white transition-colors" />
-                          Automate Full Agentic Extraction
+                          {useDemoMode ? 'Run Demo Extraction' : 'Automate Full Agentic Extraction'}
                         </>
                       )}
                     </button>
                   </div>
+
+                  {useDemoMode && (
+                    <p className="mt-3 text-xs text-emerald-600 font-medium text-center">
+                      Demo mode uses mock data to test UI features without API calls
+                    </p>
+                  )}
                 </div>
               </section>
             </div>
