@@ -183,3 +183,46 @@ export interface ProcessingState {
   progress: number;
   error?: string;
 }
+
+// ============================================
+// Precise Search-Based Highlighting Types
+// (Ctrl+F approach for exact text location)
+// ============================================
+
+/**
+ * Stores position information for each text item in the PDF.
+ * Built during PDF load by iterating through all pages' textContent.items[].
+ */
+export interface TextPosition {
+  pageNum: number;
+  itemIndex: number;              // Index in textContent.items[] for this page
+  text: string;                   // Raw text from PDF
+  normalizedText: string;         // Lowercase, trimmed for search matching
+  charStart: number;              // Character offset in concatenated full document text
+  charEnd: number;                // End position (charStart + text.length)
+  x: number;                      // Horizontal position from transform[4]
+  y: number;                      // Vertical position from transform[5]
+}
+
+/**
+ * Result from searchForCitedText() - identifies which text items match a query.
+ * Multiple itemIndices means the citation spans multiple text items.
+ */
+export interface SearchMatch {
+  pageNum: number;
+  itemIndices: number[];          // Which textContent.items to highlight
+  exactMatch: boolean;            // True if exact substring found
+  confidence: number;             // 1.0 for exact, lower for fuzzy fallback
+}
+
+/**
+ * Pre-computed highlight for O(1) lookup during render.
+ * Stored in Map<"pageNum-itemIndex", PreciseHighlight>.
+ */
+export interface PreciseHighlight {
+  pageNum: number;
+  itemIndex: number;
+  path: string;                   // Field path for navigation (e.g., "baseline.sampleSize.totalN")
+  verified: boolean;              // True if from Citations API (shows green badge)
+  citedText: string;              // Original cited text for tooltip
+}

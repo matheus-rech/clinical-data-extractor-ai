@@ -8,7 +8,7 @@ import {
   Bot, Sparkles, Target, MousePointer2
 } from 'lucide-react';
 import { runExtraction } from './services/claudeService';
-import { ExtractionResults, ProcessingState, Extraction } from './types';
+import { ExtractionResults, ProcessingState, Extraction, TextPosition, SearchMatch, PreciseHighlight } from './types';
 
 // PDF.js worker setup
 // @ts-ignore
@@ -45,6 +45,10 @@ export default function App() {
   const [selectedText, setSelectedText] = useState<{ text: string; page: number } | null>(null);
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
+  // Precise search-based highlighting state (Ctrl+F approach)
+  const [textIndex, setTextIndex] = useState<TextPosition[]>([]);
+  const [preciseHighlights, setPreciseHighlights] = useState<Map<string, PreciseHighlight>>(new Map());
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfViewerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
@@ -67,19 +71,43 @@ export default function App() {
 
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       setPdfDoc(pdf);
-      
+
       let fullText = "";
       const images: string[] = [];
+
+      // Build searchable text index (Ctrl+F approach)
+      const newTextIndex: TextPosition[] = [];
+      let charOffset = 0;
 
       for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) {
         setProcessing(prev => ({ ...prev, progress: 10 + (i / Math.min(pdf.numPages, 10)) * 20 }));
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
+        const viewport = page.getViewport({ scale: 1.5 });
+
+        // Build text index for this page
+        textContent.items.forEach((item: any, idx: number) => {
+          const text = item.str || '';
+          const transform = pdfjsLib.Util.transform(viewport.transform, item.transform);
+
+          newTextIndex.push({
+            pageNum: i,
+            itemIndex: idx,
+            text: text,
+            normalizedText: text.toLowerCase().trim(),
+            charStart: charOffset,
+            charEnd: charOffset + text.length,
+            x: transform[4],
+            y: transform[5]
+          });
+
+          charOffset += text.length + 1; // +1 for space between items
+        });
+
         const pageText = textContent.items.map((item: any) => item.str).join(' ');
         fullText += `--- Page ${i} ---\n${pageText}\n\n`;
 
         if (i <= 3) {
-          const viewport = page.getViewport({ scale: 1.5 });
           const canvas = document.createElement('canvas');
           const context = canvas.getContext('2d');
           if (context) {
@@ -90,6 +118,9 @@ export default function App() {
           }
         }
       }
+
+      setTextIndex(newTextIndex);
+      console.log(`Built text index with ${newTextIndex.length} items across ${pdf.numPages} pages`);
 
       setPdfText(fullText);
       setPdfImages(images);
@@ -197,6 +228,133 @@ export default function App() {
       },
     };
   };
+
+  // ============================================
+  // Precise Search-Based Highlighting (Ctrl+F)
+  // ============================================
+
+  /**
+   * Ctrl+F style search: finds which text items contain the query string.
+   * Returns the page number and item indices to highlight.
+   */
+  const searchForCitedText = useCallback((query: string, hintPage?: number): SearchMatch | null => {
+    if (!query || query.length < 2 || textIndex.length === 0) return null;
+
+    const normalizedQuery = query.toLowerCase().trim().replace(/\s+/g, ' ');
+
+    // Build full text for the hint page first (or all pages)
+    const searchPages = hintPage
+      ? [hintPage, ...([1,2,3,4,5,6,7,8,9,10].filter(p => p !== hintPage))] // Prioritize hint page
+      : [1,2,3,4,5,6,7,8,9,10];
+
+    for (const pageNum of searchPages) {
+      const pageItems = textIndex.filter(t => t.pageNum === pageNum);
+      if (pageItems.length === 0) continue;
+
+      // Concatenate all text items for this page with spaces
+      const pageTexts = pageItems.map(t => t.text);
+      const fullPageText = pageTexts.join(' ');
+      const normalizedPageText = fullPageText.toLowerCase();
+
+      // Strategy 1: Exact substring match (Ctrl+F)
+      const matchIndex = normalizedPageText.indexOf(normalizedQuery);
+      if (matchIndex !== -1) {
+        // Find which items span this character range
+        const itemIndices = findItemsForCharRange(pageItems, matchIndex, matchIndex + normalizedQuery.length);
+        if (itemIndices.length > 0) {
+          return {
+            pageNum,
+            itemIndices,
+            exactMatch: true,
+            confidence: 1.0
+          };
+        }
+      }
+
+      // Strategy 2: Word-overlap match for longer citations
+      if (query.length > 15) {
+        const queryWords = normalizedQuery.split(' ').filter(w => w.length > 3);
+        if (queryWords.length >= 2) {
+          // Find items that contain multiple query words
+          const matchingItems: number[] = [];
+          pageItems.forEach((item, idx) => {
+            const itemNorm = item.normalizedText;
+            const matchCount = queryWords.filter(w => itemNorm.includes(w)).length;
+            if (matchCount >= 2 || (queryWords.length === 2 && matchCount >= 1)) {
+              matchingItems.push(item.itemIndex);
+            }
+          });
+          if (matchingItems.length > 0) {
+            return {
+              pageNum,
+              itemIndices: matchingItems,
+              exactMatch: false,
+              confidence: 0.7
+            };
+          }
+        }
+      }
+    }
+
+    return null;
+  }, [textIndex]);
+
+  /**
+   * Helper: Given a character range in concatenated page text,
+   * find which text item indices it spans.
+   */
+  const findItemsForCharRange = (pageItems: TextPosition[], startChar: number, endChar: number): number[] => {
+    const indices: number[] = [];
+    let currentChar = 0;
+
+    for (const item of pageItems) {
+      const itemStart = currentChar;
+      const itemEnd = currentChar + item.text.length;
+
+      // Check if this item overlaps with the search range
+      if (itemEnd > startChar && itemStart < endChar) {
+        indices.push(item.itemIndex);
+      }
+
+      currentChar = itemEnd + 1; // +1 for the space between items
+    }
+
+    return indices;
+  };
+
+  /**
+   * Build precise highlights for all mappings by searching for their cited_text.
+   * This runs after extraction results are available.
+   */
+  const buildPreciseHighlights = useCallback((mappingItems: MappingItem[]): Map<string, PreciseHighlight> => {
+    const highlights = new Map<string, PreciseHighlight>();
+
+    for (const mapping of mappingItems) {
+      // Prioritize cited_text (most accurate from Citations API)
+      const searchQuery = mapping.citedText || mapping.text;
+      if (!searchQuery || searchQuery.length < 2) continue;
+
+      const match = searchForCitedText(searchQuery, mapping.page);
+      if (match) {
+        // Add a highlight entry for each matched item
+        for (const itemIdx of match.itemIndices) {
+          const key = `${match.pageNum}-${itemIdx}`;
+          highlights.set(key, {
+            pageNum: match.pageNum,
+            itemIndex: itemIdx,
+            path: mapping.path,
+            verified: mapping.verified,
+            citedText: mapping.citedText || searchQuery
+          });
+        }
+      }
+    }
+
+    console.log(`Built ${highlights.size} precise highlights from ${mappingItems.length} mappings`);
+    return highlights;
+  }, [searchForCitedText]);
+
+  // Note: useEffect for preciseHighlights is placed after mappings is defined (below)
 
   const startExtraction = async () => {
     if (!pdfText) {
@@ -340,6 +498,16 @@ export default function App() {
 
   const mappings = useMemo(() => getMappings(), [getMappings]);
 
+  // Effect: Rebuild precise highlights when mappings or textIndex change
+  useEffect(() => {
+    if (textIndex.length > 0 && mappings.length > 0) {
+      const newHighlights = buildPreciseHighlights(mappings);
+      setPreciseHighlights(newHighlights);
+    } else {
+      setPreciseHighlights(new Map());
+    }
+  }, [textIndex, mappings, buildPreciseHighlights]);
+
   const handleScrollToPage = (page: number) => {
     const el = pageRefs.current[page];
     if (el) {
@@ -468,10 +636,11 @@ export default function App() {
           
           <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent" ref={pdfViewerRef}>
             {pdfDoc ? (
-              <PdfRenderer 
-                pdfDoc={pdfDoc} 
-                onTextSelect={(text, page) => setSelectedText({ text, page })} 
+              <PdfRenderer
+                pdfDoc={pdfDoc}
+                onTextSelect={(text, page) => setSelectedText({ text, page })}
                 mappings={mappings}
+                preciseHighlights={preciseHighlights}
                 onRegisterPageRef={(page, ref) => pageRefs.current[page] = ref}
                 focusedField={focusedField}
                 onHighlightClick={handlePdfHighlightClick}
@@ -645,12 +814,13 @@ interface PdfRendererProps {
   pdfDoc: any;
   onTextSelect: (text: string, page: number) => void;
   mappings: MappingItem[];
+  preciseHighlights: Map<string, PreciseHighlight>;
   onRegisterPageRef: (page: number, ref: HTMLDivElement | null) => void;
   focusedField: string | null;
   onHighlightClick: (path: string, page: number) => void;
 }
 
-function PdfRenderer({ pdfDoc, onTextSelect, mappings, onRegisterPageRef, focusedField, onHighlightClick }: PdfRendererProps) {
+function PdfRenderer({ pdfDoc, onTextSelect, mappings, preciseHighlights, onRegisterPageRef, focusedField, onHighlightClick }: PdfRendererProps) {
   const [pages, setPages] = useState<number[]>([]);
 
   useEffect(() => {
@@ -662,12 +832,13 @@ function PdfRenderer({ pdfDoc, onTextSelect, mappings, onRegisterPageRef, focuse
   return (
     <div className="space-y-6">
       {pages.map(pageNum => (
-        <PdfPage 
-          key={pageNum} 
-          pdfDoc={pdfDoc} 
-          pageNum={pageNum} 
+        <PdfPage
+          key={pageNum}
+          pdfDoc={pdfDoc}
+          pageNum={pageNum}
           onTextSelect={onTextSelect}
           highlights={mappings.filter(m => m.page === pageNum)}
+          preciseHighlights={preciseHighlights}
           onRegisterRef={(ref) => onRegisterPageRef(pageNum, ref)}
           focusedField={focusedField}
           onHighlightClick={onHighlightClick}
@@ -682,12 +853,13 @@ interface PdfPageProps {
   pageNum: number;
   onTextSelect: (text: string, page: number) => void;
   highlights: MappingItem[];
+  preciseHighlights: Map<string, PreciseHighlight>;
   onRegisterRef: (ref: HTMLDivElement | null) => void;
   focusedField: string | null;
   onHighlightClick: (path: string, page: number) => void;
 }
 
-function PdfPage({ pdfDoc, pageNum, onTextSelect, highlights, onRegisterRef, focusedField, onHighlightClick }: PdfPageProps) {
+function PdfPage({ pdfDoc, pageNum, onTextSelect, highlights, preciseHighlights, onRegisterRef, focusedField, onHighlightClick }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -702,10 +874,10 @@ function PdfPage({ pdfDoc, pageNum, onTextSelect, highlights, onRegisterRef, foc
     const renderPage = async () => {
       const page = await pdfDoc.getPage(pageNum);
       const viewport = page.getViewport({ scale: 1.5 });
-      
+
       const canvas = canvasRef.current;
       if (!canvas) return;
-      
+
       const context = canvas.getContext('2d');
       canvas.height = viewport.height;
       canvas.width = viewport.width;
@@ -714,82 +886,31 @@ function PdfPage({ pdfDoc, pageNum, onTextSelect, highlights, onRegisterRef, foc
         await page.render({ canvasContext: context, viewport }).promise;
       }
 
-      // Render text layer
+      // Render text layer with precise highlighting
       const textContent = await page.getTextContent();
       const textLayer = textLayerRef.current;
       if (textLayer) {
-        textLayer.innerHTML = '';
+        // Safe DOM clearing - remove all children
+        while (textLayer.firstChild) {
+          textLayer.removeChild(textLayer.firstChild);
+        }
         textLayer.style.width = `${viewport.width}px`;
         textLayer.style.height = `${viewport.height}px`;
-        
-        // Helper: normalize text for matching (remove extra spaces, lowercase)
-        const normalize = (str: string) => str.toLowerCase().replace(/\s+/g, ' ').trim();
-        const normalizeStrict = (str: string) => str.toLowerCase().replace(/\s+/g, '').trim();
 
-        // Helper: check if PDF text matches any part of highlight text
-        const findMatchingHighlight = (itemStr: string): MappingItem | null => {
-          if (!itemStr || itemStr.trim().length < 2) return null;
-
-          const itemNorm = normalize(itemStr);
-          const itemStrictNorm = normalizeStrict(itemStr);
-
-          // Score-based matching: prefer exact matches and verified citations
-          let bestMatch: MappingItem | null = null;
-          let bestScore = 0;
-
-          for (const h of highlights) {
-            const hTextNorm = normalize(h.text);
-            const hTextStrictNorm = normalizeStrict(h.text);
-
-            let score = 0;
-
-            // Exact match (highest priority)
-            if (itemNorm === hTextNorm || itemStrictNorm === hTextStrictNorm) {
-              score = 100;
-            }
-            // PDF text is contained in highlight text (common case)
-            else if (hTextStrictNorm.includes(itemStrictNorm) && itemStr.length > 2) {
-              score = 50 + (itemStr.length / hTextNorm.length) * 30; // Longer matches score higher
-            }
-            // Highlight text is contained in PDF text (for short citations)
-            else if (itemStrictNorm.includes(hTextStrictNorm) && h.text.length > 3) {
-              score = 40;
-            }
-            // Word-level matching for longer citations
-            else if (h.text.length > 20) {
-              const hWords = hTextNorm.split(' ').filter(w => w.length > 3);
-              const matchingWords = hWords.filter(w => itemNorm.includes(w));
-              if (matchingWords.length > 0) {
-                score = 20 + (matchingWords.length / hWords.length) * 30;
-              }
-            }
-
-            // Boost verified citations (from Citations API)
-            if (h.verified && score > 0) {
-              score += 10;
-            }
-
-            if (score > bestScore) {
-              bestScore = score;
-              bestMatch = h;
-            }
-          }
-
-          return bestScore > 25 ? bestMatch : null; // Threshold to avoid false positives
-        };
-
-        textContent.items.forEach((item: any) => {
+        textContent.items.forEach((item: any, idx: number) => {
           const span = document.createElement('span');
           const transform = pdfjsLib.Util.transform(viewport.transform, item.transform);
           const style = `left: ${transform[4]}px; top: ${transform[5]}px; font-size: ${item.height * viewport.scale}px; font-family: ${item.fontName};`;
           span.style.cssText = style;
           span.textContent = item.str;
 
-          const highlight = findMatchingHighlight(item.str);
+          // ★ PRECISE LOOKUP: O(1) Map lookup instead of O(n) fuzzy matching
+          const key = `${pageNum}-${idx}`;
+          const preciseHighlight = preciseHighlights.get(key);
 
-          if (highlight) {
-            const isFocused = focusedField === highlight.path;
-            const isVerified = highlight.verified;
+          if (preciseHighlight) {
+            const isFocused = focusedField === preciseHighlight.path;
+            const isVerified = preciseHighlight.verified;
 
             // Color coding: Indigo (focused) > Green (verified) > Yellow (AI-extracted)
             if (isFocused) {
@@ -807,12 +928,13 @@ function PdfPage({ pdfDoc, pageNum, onTextSelect, highlights, onRegisterRef, foc
             span.style.pointerEvents = 'auto';
 
             span.onclick = (e) => {
-               e.stopPropagation();
-               onHighlightClick(highlight.path, pageNum);
+              e.stopPropagation();
+              onHighlightClick(preciseHighlight.path, pageNum);
             };
 
-            // Add title for debugging/info
-            span.title = `${highlight.label}${isVerified ? ' (Verified)' : ''}`;
+            // Add title with cited text for verification
+            const pathLabel = preciseHighlight.path.split('.').pop() || preciseHighlight.path;
+            span.title = `${pathLabel}${isVerified ? ' ✓ Verified' : ''}\n"${preciseHighlight.citedText}"`;
           }
 
           textLayer.appendChild(span);
@@ -821,7 +943,7 @@ function PdfPage({ pdfDoc, pageNum, onTextSelect, highlights, onRegisterRef, foc
     };
 
     renderPage();
-  }, [pdfDoc, pageNum, highlights, focusedField]);
+  }, [pdfDoc, pageNum, preciseHighlights, focusedField]);
 
   const handleMouseUp = () => {
     const selection = window.getSelection();
