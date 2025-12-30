@@ -180,18 +180,36 @@ export default function App() {
 
   const getMappings = useCallback(() => {
     if (!results) return [];
-    const mappings: { page: number; text: string; label: string; path: string; type: 'manual' | 'ai' }[] = [];
-    
+    const mappings: {
+      page: number;
+      text: string;
+      label: string;
+      path: string;
+      type: 'manual' | 'ai';
+      verified: boolean;
+      citedText?: string;
+    }[] = [];
+
     const traverse = (obj: any, path: string) => {
       if (!obj) return;
-      
+
       if (obj.source_location?.page && obj.content) {
+        // Prioritize cited_text (API-verified) > exact_text_reference > content
+        const citedText = obj.source_location.cited_text;
+        const exactRef = obj.source_location.exact_text_reference;
+        const contentStr = String(obj.content);
+
+        // Use cited_text for matching if available (most accurate from Citations API)
+        const textForMatching = citedText || exactRef || contentStr;
+
         mappings.push({
           page: obj.source_location.page,
-          text: obj.source_location.exact_text_reference || String(obj.content),
+          text: textForMatching,
           label: path.split('.').pop() || path,
           path: path,
-          type: obj.notes?.toLowerCase().includes('manual') || obj.notes?.toLowerCase().includes('user') ? 'manual' : 'ai'
+          type: obj.notes?.toLowerCase().includes('manual') || obj.notes?.toLowerCase().includes('user') ? 'manual' : 'ai',
+          verified: !!obj.source_location.citation_verified,
+          citedText: citedText
         });
       }
 
@@ -296,15 +314,42 @@ export default function App() {
         
         {/* Left Column: PDF Viewer */}
         <div className="lg:col-span-6 flex flex-col bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden h-full">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white z-10">
-            <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-              <FileText className="w-4 h-4 text-indigo-500" />
-              Document Workspace
-            </h2>
-            {file && (
-              <div className="flex items-center gap-3">
-                 <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded-lg uppercase tracking-wide">{file.name}</span>
-                 <span className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-2 py-1 rounded-lg uppercase tracking-wide">{mappings.length} Annotations</span>
+          <div className="p-4 border-b border-slate-100 flex flex-col gap-2 bg-white z-10">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                <FileText className="w-4 h-4 text-indigo-500" />
+                Document Workspace
+              </h2>
+              {file && (
+                <div className="flex items-center gap-2">
+                   <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded-lg uppercase tracking-wide truncate max-w-[120px]" title={file.name}>{file.name}</span>
+                   {mappings.length > 0 && (
+                     <>
+                       <span className="text-[10px] font-bold bg-emerald-50 text-emerald-600 px-2 py-1 rounded-lg uppercase tracking-wide flex items-center gap-1">
+                         <CheckCircle2 className="w-3 h-3" />
+                         {mappings.filter(m => m.verified).length} Verified
+                       </span>
+                       <span className="text-[10px] font-bold bg-amber-50 text-amber-600 px-2 py-1 rounded-lg uppercase tracking-wide">
+                         {mappings.filter(m => !m.verified).length} AI
+                       </span>
+                     </>
+                   )}
+                </div>
+              )}
+            </div>
+            {/* Color Legend */}
+            {results && mappings.length > 0 && (
+              <div className="flex items-center gap-4 text-[9px] font-medium text-slate-500">
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded bg-emerald-400/40"></span> Verified Citation
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded bg-amber-300/50"></span> AI Extracted
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded bg-indigo-500/60"></span> Focused
+                </span>
+                <span className="ml-auto italic">Click highlights to navigate →</span>
               </div>
             )}
           </div>
@@ -457,10 +502,20 @@ export default function App() {
 }
 
 // PDF Rendering Components
+interface MappingItem {
+  page: number;
+  text: string;
+  label: string;
+  path: string;
+  type: 'manual' | 'ai';
+  verified: boolean;
+  citedText?: string;
+}
+
 interface PdfRendererProps {
   pdfDoc: any;
   onTextSelect: (text: string, page: number) => void;
-  mappings: { page: number; text: string; label: string; type: string; path: string }[];
+  mappings: MappingItem[];
   onRegisterPageRef: (page: number, ref: HTMLDivElement | null) => void;
   focusedField: string | null;
   onHighlightClick: (path: string, page: number) => void;
@@ -497,7 +552,7 @@ interface PdfPageProps {
   pdfDoc: any;
   pageNum: number;
   onTextSelect: (text: string, page: number) => void;
-  highlights: { text: string; label: string; type: string; path: string }[];
+  highlights: MappingItem[];
   onRegisterRef: (ref: HTMLDivElement | null) => void;
   focusedField: string | null;
   onHighlightClick: (path: string, page: number) => void;
@@ -538,40 +593,97 @@ function PdfPage({ pdfDoc, pageNum, onTextSelect, highlights, onRegisterRef, foc
         textLayer.style.width = `${viewport.width}px`;
         textLayer.style.height = `${viewport.height}px`;
         
+        // Helper: normalize text for matching (remove extra spaces, lowercase)
+        const normalize = (str: string) => str.toLowerCase().replace(/\s+/g, ' ').trim();
+        const normalizeStrict = (str: string) => str.toLowerCase().replace(/\s+/g, '').trim();
+
+        // Helper: check if PDF text matches any part of highlight text
+        const findMatchingHighlight = (itemStr: string): MappingItem | null => {
+          if (!itemStr || itemStr.trim().length < 2) return null;
+
+          const itemNorm = normalize(itemStr);
+          const itemStrictNorm = normalizeStrict(itemStr);
+
+          // Score-based matching: prefer exact matches and verified citations
+          let bestMatch: MappingItem | null = null;
+          let bestScore = 0;
+
+          for (const h of highlights) {
+            const hTextNorm = normalize(h.text);
+            const hTextStrictNorm = normalizeStrict(h.text);
+
+            let score = 0;
+
+            // Exact match (highest priority)
+            if (itemNorm === hTextNorm || itemStrictNorm === hTextStrictNorm) {
+              score = 100;
+            }
+            // PDF text is contained in highlight text (common case)
+            else if (hTextStrictNorm.includes(itemStrictNorm) && itemStr.length > 2) {
+              score = 50 + (itemStr.length / hTextNorm.length) * 30; // Longer matches score higher
+            }
+            // Highlight text is contained in PDF text (for short citations)
+            else if (itemStrictNorm.includes(hTextStrictNorm) && h.text.length > 3) {
+              score = 40;
+            }
+            // Word-level matching for longer citations
+            else if (h.text.length > 20) {
+              const hWords = hTextNorm.split(' ').filter(w => w.length > 3);
+              const matchingWords = hWords.filter(w => itemNorm.includes(w));
+              if (matchingWords.length > 0) {
+                score = 20 + (matchingWords.length / hWords.length) * 30;
+              }
+            }
+
+            // Boost verified citations (from Citations API)
+            if (h.verified && score > 0) {
+              score += 10;
+            }
+
+            if (score > bestScore) {
+              bestScore = score;
+              bestMatch = h;
+            }
+          }
+
+          return bestScore > 25 ? bestMatch : null; // Threshold to avoid false positives
+        };
+
         textContent.items.forEach((item: any) => {
           const span = document.createElement('span');
           const transform = pdfjsLib.Util.transform(viewport.transform, item.transform);
           const style = `left: ${transform[4]}px; top: ${transform[5]}px; font-size: ${item.height * viewport.scale}px; font-family: ${item.fontName};`;
           span.style.cssText = style;
           span.textContent = item.str;
-          
-          const normalize = (str: string) => str.toLowerCase().replace(/\s+/g, '').trim();
-          const itemStrNorm = normalize(item.str);
-          
-          let highlight = null;
-          
-          if (itemStrNorm.length > 0) {
-            highlight = highlights.find(h => {
-               const hTextNorm = normalize(h.text);
-               return hTextNorm.includes(itemStrNorm) && (item.str.length > 2 || itemStrNorm === hTextNorm);
-            });
-          }
-          
+
+          const highlight = findMatchingHighlight(item.str);
+
           if (highlight) {
             const isFocused = focusedField === highlight.path;
-            span.style.backgroundColor = isFocused ? 'rgba(99, 102, 241, 0.6)' : 'rgba(252, 211, 77, 0.4)'; 
+            const isVerified = highlight.verified;
+
+            // Color coding: Indigo (focused) > Green (verified) > Yellow (AI-extracted)
+            if (isFocused) {
+              span.style.backgroundColor = 'rgba(99, 102, 241, 0.6)'; // Indigo
+              span.style.boxShadow = '0 0 0 2px rgba(99, 102, 241, 0.4)';
+              span.style.zIndex = '10';
+            } else if (isVerified) {
+              span.style.backgroundColor = 'rgba(16, 185, 129, 0.35)'; // Green for verified
+            } else {
+              span.style.backgroundColor = 'rgba(252, 211, 77, 0.4)'; // Yellow for AI
+            }
+
             span.style.borderRadius = '2px';
             span.style.cursor = 'pointer';
-            span.style.pointerEvents = 'auto'; // Ensure clicks register
-            if (isFocused) {
-               span.style.boxShadow = '0 0 0 2px rgba(99, 102, 241, 0.4)';
-               span.style.zIndex = '10';
-            }
-            
+            span.style.pointerEvents = 'auto';
+
             span.onclick = (e) => {
-               e.stopPropagation(); // Prevent text selection logic
-               onHighlightClick(highlight!.path, pageNum);
+               e.stopPropagation();
+               onHighlightClick(highlight.path, pageNum);
             };
+
+            // Add title for debugging/info
+            span.title = `${highlight.label}${isVerified ? ' (Verified)' : ''}`;
           }
 
           textLayer.appendChild(span);
