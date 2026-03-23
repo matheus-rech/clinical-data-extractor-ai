@@ -28,8 +28,8 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "react-dom": "^19.2.3",
-    "@anthropic-ai/sdk": "^0.52.0",
+    "react-dom": "^19.2.4",
+    "@anthropic-ai/sdk": "^0.80.0",
     "react": "^19.2.3",
     "lucide-react": "^0.562.0"
   },
